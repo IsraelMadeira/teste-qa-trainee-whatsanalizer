@@ -1,0 +1,212 @@
+<main class="page">
+  <header class="hero">
+    <div>
+      <h1>AI Chat Insights</h1>
+      <p>WhatsAnalizer para leitura automatizada de conversas, filtros e diagnostico de qualidade.</p>
+    </div>
+    <div class="status-chip" [class.loading]="loading()">
+      {{ loading() ? 'Analisando com Z.AI...' : 'Pronto para analise' }}
+    </div>
+  </header>
+
+  <section *ngIf="error()" class="panel error-box">
+    <strong>Erro:</strong> {{ error() }}
+  </section>
+
+  <section class="layout-grid">
+    <aside class="left-column">
+      <section class="panel">
+        <h2>Calibracao da IA</h2>
+
+        <label>
+          System Prompt
+          <textarea data-testid="system-prompt" [value]="systemPrompt()" (input)="onSystemPromptInput($event)"></textarea>
+        </label>
+
+        <label>
+          Modelo
+          <select data-testid="model-select" [value]="selectedModel()" (change)="onModelChange($event)">
+            <option *ngFor="let item of modelOptions" [value]="item.value">{{ item.label }}</option>
+          </select>
+        </label>
+
+        <label>
+          Temperature ({{ temperature() }})
+          <input
+            data-testid="temperature-slider"
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            [value]="temperature()"
+            (input)="onTemperatureChange($event)"
+          />
+        </label>
+
+        <label>
+          Token Z.AI
+          <input
+            data-testid="token-input"
+            type="password"
+            [class.input-invalid]="tokenRequiredError() || tokenInvalidError()"
+            [value]="token()"
+            (input)="onTokenInput($event)"
+            (blur)="onTokenBlur()"
+            placeholder="Cole seu token"
+          />
+          <small class="field-error" *ngIf="tokenRequiredError()">Token é obrigatório</small>
+          <small class="field-error" *ngIf="!tokenRequiredError() && tokenInvalidError()">Token inválido</small>
+        </label>
+      </section>
+
+      <section class="panel">
+        <h2>Upload</h2>
+        <label>
+          Arquivo de conversa (.txt)
+          <input data-testid="upload-input" type="file" accept=".txt" (change)="onFileUpload($event)" />
+        </label>
+        <p class="file-name" *ngIf="loadedFileName()">Arquivo carregado: {{ loadedFileName() }}</p>
+
+        <button
+          type="button"
+          class="primary full-width"
+          data-testid="analyze-button"
+          [disabled]="!canSubmit()"
+          (click)="generateInsights()"
+        >
+          {{ loading() ? 'Analisando...' : 'Enviar para Análise' }}
+        </button>
+      </section>
+
+      <section class="panel">
+        <h2>Filtros basicos</h2>
+        <label>
+          Palavra-chave
+          <input type="text" [value]="keyword()" (input)="onKeywordInput($event)" placeholder="ex: atraso" />
+        </label>
+
+        <div class="two-col">
+          <label>
+            Data inicial
+            <input type="date" [value]="dateFrom()" (change)="onDateFromChange($event)" />
+          </label>
+          <label>
+            Data final
+            <input type="date" [value]="dateTo()" (change)="onDateToChange($event)" />
+          </label>
+        </div>
+
+        <button type="button" class="secondary full-width" (click)="resetFilters()">Limpar filtros</button>
+      </section>
+    </aside>
+
+    <section class="right-column" data-testid="dashboard-container">
+      <ng-container *ngIf="hasAnalysis(); else emptyState">
+        <header class="dashboard-header panel" data-testid="dashboard-header">
+          <h2>Dashboard</h2>
+          <div class="filter-inline">
+            <label for="participantFilter">Filtro por participante</label>
+            <select
+              id="participantFilter"
+              data-testid="participant-filter"
+              [value]="selectedParticipant()"
+              (change)="onParticipantChange($event)"
+            >
+              <option *ngFor="let participant of participants()" [value]="participant">{{ participant }}</option>
+            </select>
+          </div>
+        </header>
+
+        <section class="kpi-grid">
+          <article class="kpi-card" data-testid="kpi-envolvidos">
+            <p class="kpi-value">{{ kpiInvolved() }}</p>
+            <p class="kpi-label">Envolvidos</p>
+          </article>
+          <article class="kpi-card" data-testid="kpi-tarefas">
+            <p class="kpi-value">{{ filteredTasks().length }}</p>
+            <p class="kpi-label">Tarefas</p>
+          </article>
+          <article class="kpi-card" data-testid="kpi-prazos">
+            <p class="kpi-value">{{ filteredDeadlines().length }}</p>
+            <p class="kpi-label">Prazos</p>
+          </article>
+          <article class="kpi-card" data-testid="kpi-riscos">
+            <p class="kpi-value">{{ filteredRisks().length }}</p>
+            <p class="kpi-label">Riscos</p>
+          </article>
+          <article class="kpi-card" data-testid="kpi-conflitos">
+            <p class="kpi-value">{{ filteredConflicts().length }}</p>
+            <p class="kpi-label">Conflitos</p>
+          </article>
+        </section>
+
+        <section class="panel active-filters" *ngIf="hasActiveFilters()">
+          <h3>Filtros aplicados</h3>
+          <div class="chips">
+            <span class="chip" *ngFor="let filter of activeFilterChips()">{{ filter }}</span>
+          </div>
+        </section>
+
+        <section class="panel" data-testid="resumo-card">
+          <h3>Resumo executivo</h3>
+          <p>{{ apiResult()?.summary }}</p>
+        </section>
+
+        <section class="panel sentiment-card" data-testid="sentimento-card">
+          <h3>Sentimento da conversa ({{ sentimentScore() }}/10)</h3>
+          <div class="sentiment-body">
+            <span class="emoji">{{ sentimentEmoji() }}</span>
+            <p>{{ apiResult()?.sentimentDescription || 'Sem descricao de sentimento retornada pela IA.' }}</p>
+          </div>
+        </section>
+
+        <section class="panel" data-testid="envolvidos-card">
+          <h3>Envolvidos</h3>
+          <div class="chips">
+            <span class="chip" *ngFor="let item of apiResult()?.participants">{{ item }}</span>
+          </div>
+        </section>
+
+        <section class="list-grid">
+          <article class="panel" data-testid="tarefas-card">
+            <h3>Tarefas <span class="badge">{{ filteredTasks().length }}</span></h3>
+            <ul>
+              <li *ngFor="let item of filteredTasks()">{{ item }}</li>
+            </ul>
+          </article>
+
+          <article class="panel" data-testid="prazos-card">
+            <h3>Prazos <span class="badge">{{ filteredDeadlines().length }}</span></h3>
+            <ul>
+              <li *ngFor="let item of filteredDeadlines()">{{ item }}</li>
+            </ul>
+          </article>
+
+          <article class="panel" data-testid="riscos-card">
+            <h3>Riscos <span class="badge">{{ filteredRisks().length }}</span></h3>
+            <ul>
+              <li *ngFor="let item of filteredRisks()">{{ item }}</li>
+            </ul>
+          </article>
+
+          <article class="panel" data-testid="conflitos-card">
+            <h3>Conflitos <span class="badge">{{ filteredConflicts().length }}</span></h3>
+            <ul>
+              <li *ngFor="let item of filteredConflicts()">{{ item }}</li>
+            </ul>
+          </article>
+        </section>
+      </ng-container>
+
+      <ng-template #emptyState>
+        <section class="panel empty-state" data-testid="empty-state">
+          <div class="empty-state-content">
+            <span class="empty-icon" aria-hidden="true">📊</span>
+            <p>Nenhuma análise realizada ainda</p>
+            <p>Envie um arquivo .txt para gerar insights com IA</p>
+          </div>
+        </section>
+      </ng-template>
+    </section>
+  </section>
+</main>

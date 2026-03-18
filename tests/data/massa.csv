@@ -1,0 +1,4 @@
+token,arquivo,resultado
+valido,chat1.txt,sucesso
+invalido,chat1.txt,erro
+valido,invalido.txt,erro

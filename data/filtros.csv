@@ -1,0 +1,2 @@
+scenario,participant,keyword,expectedMessages
+filtro_suporte_keyword_erro,Suporte,erro,1
