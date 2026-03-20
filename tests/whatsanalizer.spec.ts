@@ -146,7 +146,9 @@ test.describe('WhatsAnalizer - fluxos criticos', () => {
       await route.abort('timedout');
     });
     await submitAnalysis(page);
-    await expect(page.getByText('Tempo de resposta excedido. Tente novamente.')).toBeVisible();
+    await expect(
+      page.getByText('Falha de conexão com a API. Verifique internet, VPN, proxy ou CORS e tente novamente.'),
+    ).toBeVisible();
 
     await expect(page.getByTestId('dashboard-header')).toHaveCount(0);
   });
