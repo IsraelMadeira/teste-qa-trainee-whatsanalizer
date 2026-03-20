@@ -375,6 +375,10 @@ Retorne APENAS JSON valido no formato:
       return 'Tempo de resposta excedido. Tente novamente.';
     }
 
+    if (code === 'CONNECTION_ERROR') {
+      return 'Falha de conexão com a API. Verifique internet, VPN, proxy ou CORS e tente novamente.';
+    }
+
     if (code === 'INVALID_TOKEN') {
       return 'Token invalido';
     }

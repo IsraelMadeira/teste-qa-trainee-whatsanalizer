@@ -108,8 +108,15 @@ export class ZAiApiService {
       );
     }
 
+    if (status === 401 || status === 403) {
+      return this.createSemanticError('INVALID_TOKEN', 'Token invalido');
+    }
+
     if (status === 0) {
-      return this.createSemanticError('TIMEOUT', 'Tempo de resposta excedido. Tente novamente.');
+      return this.createSemanticError(
+        'CONNECTION_ERROR',
+        'Falha de conexao com a API. Verifique internet, VPN, proxy ou CORS e tente novamente.',
+      );
     }
 
     if (this.isSemanticError(error)) {
