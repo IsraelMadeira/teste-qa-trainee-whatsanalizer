@@ -34,6 +34,11 @@
 1. TESTE 1 - fluxo feliz end-to-end
 2. TESTE 2 - validacao de upload invalido
 3. TESTE 3 - filtro por participante atualiza listas e badges
-4. TESTE 4 - erro de API mockado (500 e 429)
+4. TESTE 4 - erro de API mockado (500, 429 e falha de conexao)
 5. TESTE 5 - contrato invalido nao renderiza dashboard
 6. TESTE 6 - data-driven com CSV
+7. TESTE 7 - token obrigatorio com erro visual
+
+## Resultado esperado atual
+- Total de cenarios E2E: 9 testes.
+- Execucao de referencia: 9/9 passando.

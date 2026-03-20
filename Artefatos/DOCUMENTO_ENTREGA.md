@@ -17,9 +17,10 @@ Decisoes de arquitetura:
 - A integracao com IA ficou isolada no servico `ZAiApiService`, preservando separacao entre camada de UI e camada de comunicacao HTTP.
 
 Estado e reatividade:
-- Estado principal com Signals para token, arquivo carregado, loading, erro, resultado da analise e filtros.
+- Estado de formulario com Reactive Forms (`FormBuilder`) para calibracao e filtros.
+- Estado de dados e fluxo com Signals para arquivo carregado, loading, erro e resultado da analise.
 - Separacao entre estado de UI e estado de dados:
-  - UI: mensagens de erro, loading, validade de submit, estado vazio.
+  - UI: validacoes de campo, mensagens de erro, loading, validade de submit, estado vazio.
   - Dados: mensagens parseadas, resposta da IA, listas e metricas derivadas.
 - Uso de `computed` para:
   - listas filtradas (`filteredTasks`, `filteredDeadlines`, `filteredRisks`, `filteredConflicts`),
@@ -48,16 +49,16 @@ Resultado final:
 - Dados invalidos nao entram no dashboard.
 - Usuario recebe mensagem amigavel: "Resposta da IA invalida. Tente novamente."
 
-### Desafio 2: gerenciamento de estado com Signals em componente unico
+### Desafio 2: gerenciamento de estado em componente unico
 Problema:
-- Concentrar entrada, validacao, filtros e dashboard em um unico componente poderia gerar acoplamento alto.
+- Concentrar entrada, validacao, filtros e dashboard em um unico componente poderia gerar acoplamento alto e validacoes dificeis de manter.
 
 Resolucao:
-- Organizar estados e derivacoes por responsabilidade.
-- Usar `computed` para toda regra derivada (submit, badges, filtros, KPIs), evitando logica duplicada no template.
+- Separacao de responsabilidades entre formularios reativos (`FormBuilder`) e sinais de dados/derivacoes.
+- Uso de validadores declarativos no formulario e `computed` para regras derivadas (submit, badges, filtros, KPIs), evitando logica duplicada no template.
 
 Resultado final:
-- Fluxo previsivel, com reatividade clara e baixo risco de estado inconsistente.
+- Fluxo previsivel, com validacao mais profissional e baixo risco de estado inconsistente.
 
 ### Desafio 3: tratamento robusto de erros da API
 Problema:
@@ -81,6 +82,7 @@ Cenarios tratados:
 - Timeout de requisicao (~150s).
 - Rate limit (HTTP 429).
 - Erro generico de API (ex.: 500).
+- Falha de conexao/API indisponivel (status 0, CORS, proxy, VPN).
 - JSON invalido/contrato invalido retornado pela IA.
 
 Como o usuario e informado:

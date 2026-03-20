@@ -27,10 +27,10 @@ Validar a prontidao funcional e a resiliencia da aplicacao WhatsAnalizer com foc
 - Validacoes: bloqueio de extensao invalida e erro para conteudo nao parseavel.
 - Automacao: `TESTE 2 - validacao de upload invalido`.
 
-2. Erro de API (500 e 429)
-- Entrada: mock de respostas HTTP 500 e HTTP 429.
+2. Erro de API (500, 429 e falha de conexao)
+- Entrada: mock de respostas HTTP 500, HTTP 429 e abort de conexao.
 - Validacoes: mensagens corretas exibidas e ausencia de quebra visual da UI.
-- Automacao: `TESTE 4 - erro de API mockado (500 e 429)`.
+- Automacao: `TESTE 4 - erro de API mockado (500, 429 e falha de conexao)`.
 
 3. Contrato invalido
 - Entrada: payload JSON incompleto (sem campos obrigatorios).
@@ -48,7 +48,13 @@ Validar a prontidao funcional e a resiliencia da aplicacao WhatsAnalizer com foc
 3. Delay de resposta da IA
 - Coberto no fluxo feliz com atraso controlado no mock para validar estado de loading.
 
+4. Token obrigatorio com feedback visual
+- Entrada: upload valido sem token informado.
+- Validacoes: botao desabilitado, mensagem de obrigatoriedade e estado visual invalido no campo.
+- Automacao: `TESTE 7 - token obrigatorio com erro visual`.
+
 ## Criterio de saida
 - Suite Playwright executa com sucesso.
 - Todos os cenarios criticos possuem validacao automatizada.
+- Execucao de referencia: 9/9 cenarios aprovados.
 - Evidencias disponiveis via `playwright-report`.
