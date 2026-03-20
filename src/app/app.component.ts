@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { firstValueFrom } from 'rxjs';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { AbstractControl, ReactiveFormsModule, ValidationErrors, Validators, FormBuilder } from '@angular/forms';
+import { firstValueFrom, map, startWith } from 'rxjs';
 
 import {
   ApiAnalysisRequest,
@@ -16,16 +17,15 @@ import { ZAiApiService } from './services/zai-api.service';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
 })
 export class AppComponent {
   private readonly api = inject(ZAiApiService);
+  private readonly fb = inject(FormBuilder);
 
-  readonly token = signal('');
-  readonly tokenTouched = signal(false);
-  readonly systemPrompt = signal(`Voce e um analista de conversas corporativas.
+  private readonly defaultSystemPrompt = `Voce e um analista de conversas corporativas.
 Retorne APENAS JSON valido no formato:
 {
   "summary": "string",
@@ -40,9 +40,50 @@ Retorne APENAS JSON valido no formato:
     "sentimentScore": 0
   },
   "confidence": "low|medium|high"
-}`);
-  readonly selectedModel = signal('glm-5');
-  readonly temperature = signal(0.2);
+}`;
+
+  readonly calibrationForm = this.fb.nonNullable.group({
+    systemPrompt: [this.defaultSystemPrompt],
+    model: ['glm-5'],
+    temperature: [0.2],
+    token: ['', [Validators.required, this.tokenFormatValidator]],
+  });
+
+  readonly filtersForm = this.fb.nonNullable.group({
+    participant: ['Todos'],
+    keyword: [''],
+    dateFrom: [''],
+    dateTo: [''],
+  });
+
+  private readonly calibrationValues = toSignal(
+    this.calibrationForm.valueChanges.pipe(
+      startWith(this.calibrationForm.getRawValue()),
+      map((value) => ({
+        systemPrompt: value.systemPrompt ?? this.defaultSystemPrompt,
+        model: value.model ?? 'glm-5',
+        temperature: typeof value.temperature === 'number' ? value.temperature : 0.2,
+        token: value.token ?? '',
+      })),
+    ),
+    { initialValue: this.calibrationForm.getRawValue() },
+  );
+
+  private readonly filterValues = toSignal(
+    this.filtersForm.valueChanges.pipe(
+      startWith(this.filtersForm.getRawValue()),
+      map((value) => ({
+        participant: value.participant ?? 'Todos',
+        keyword: value.keyword ?? '',
+        dateFrom: value.dateFrom ?? '',
+        dateTo: value.dateTo ?? '',
+      })),
+    ),
+    { initialValue: this.filtersForm.getRawValue() },
+  );
+
+  readonly submitAttempted = signal(false);
+  readonly tokenBlurVersion = signal(0);
 
   readonly sourceMessages = signal<ChatMessage[]>([]);
   readonly loadedFileName = signal('');
@@ -71,48 +112,65 @@ Retorne APENAS JSON valido no formato:
 
   readonly hasLoadedFile = computed(() => this.loadedFileName().length > 0);
   readonly hasAnalysis = computed(() => !!this.apiResult());
-  readonly normalizedToken = computed(() => this.token().trim());
-  readonly tokenRequiredError = computed(() => this.tokenTouched() && this.normalizedToken().length === 0);
+  readonly currentTemperature = computed(() => this.calibrationValues().temperature);
+  readonly normalizedToken = computed(() => this.calibrationValues().token.trim());
+  readonly tokenRequiredError = computed(() => {
+    this.calibrationValues();
+    this.tokenBlurVersion();
+    const control = this.calibrationForm.controls.token;
+    return (control.touched || control.dirty || this.submitAttempted()) && control.hasError('required');
+  });
   readonly tokenInvalidError = computed(
-    () => this.tokenTouched() && this.normalizedToken().length > 0 && !this.isValidToken(this.normalizedToken()),
+    () => {
+      this.calibrationValues();
+      this.tokenBlurVersion();
+      const control = this.calibrationForm.controls.token;
+      return (control.touched || control.dirty || this.submitAttempted()) && control.hasError('tokenFormat');
+    },
   );
   readonly canSubmit = computed(
-    () => this.hasLoadedFile() && !this.loading() && this.normalizedToken().length > 0 && this.isValidToken(this.normalizedToken()),
+    () =>
+      this.hasLoadedFile() &&
+      !this.loading() &&
+      this.normalizedToken().length > 0 &&
+      this.calibrationForm.controls.token.valid,
   );
   readonly hasActiveFilters = computed(
     () =>
-      this.selectedParticipant() !== 'Todos' ||
-      !!this.keyword().trim() ||
-      !!this.dateFrom().trim() ||
-      !!this.dateTo().trim(),
+      this.filterValues().participant !== 'Todos' ||
+      !!this.filterValues().keyword.trim() ||
+      !!this.filterValues().dateFrom.trim() ||
+      !!this.filterValues().dateTo.trim(),
   );
   readonly activeFilterChips = computed(() => {
     const chips: string[] = [];
+    const filters = this.filterValues();
 
-    if (this.selectedParticipant() !== 'Todos') {
-      chips.push(`Participante: ${this.selectedParticipant()}`);
+    if (filters.participant !== 'Todos') {
+      chips.push(`Participante: ${filters.participant}`);
     }
 
-    if (this.keyword().trim()) {
-      chips.push(`Palavra-chave: ${this.keyword().trim()}`);
+    if (filters.keyword.trim()) {
+      chips.push(`Palavra-chave: ${filters.keyword.trim()}`);
     }
 
-    if (this.dateFrom().trim()) {
-      chips.push(`Data inicial: ${this.dateFrom()}`);
+    if (filters.dateFrom.trim()) {
+      chips.push(`Data inicial: ${filters.dateFrom}`);
     }
 
-    if (this.dateTo().trim()) {
-      chips.push(`Data final: ${this.dateTo()}`);
+    if (filters.dateTo.trim()) {
+      chips.push(`Data final: ${filters.dateTo}`);
     }
 
     return chips;
   });
 
   readonly filteredMessages = computed(() => {
-    const participant = this.selectedParticipant();
-    const keyword = this.keyword().trim().toLowerCase();
-    const fromDate = this.dateFrom() ? new Date(this.dateFrom()) : null;
-    const toDate = this.dateTo() ? new Date(this.dateTo()) : null;
+    const filters = this.filterValues();
+    const participant = filters.participant;
+    const keyword = filters.keyword.trim().toLowerCase();
+    const fromDate = filters.dateFrom ? new Date(filters.dateFrom) : null;
+    const toDate = filters.dateTo ? new Date(filters.dateTo) : null;
 
     return this.sourceMessages().filter((message) => {
       const participantOk = participant === 'Todos' || message.author === participant;
@@ -133,7 +191,7 @@ Retorne APENAS JSON valido no formato:
   );
 
   readonly kpiInvolved = computed(() => {
-    const current = this.selectedParticipant();
+    const current = this.filterValues().participant;
     const participants = this.apiResult()?.participants ?? [];
     if (current === 'Todos') {
       return participants.length;
@@ -199,56 +257,17 @@ Retorne APENAS JSON valido no formato:
     };
   });
 
-  onTokenInput(event: Event): void {
-    const value = (event.target as HTMLInputElement | null)?.value ?? '';
-    this.tokenTouched.set(true);
-    this.token.set(value);
+  resetFilters(): void {
+    this.filtersForm.reset({
+      participant: 'Todos',
+      keyword: '',
+      dateFrom: '',
+      dateTo: '',
+    });
   }
 
   onTokenBlur(): void {
-    this.tokenTouched.set(true);
-  }
-
-  onSystemPromptInput(event: Event): void {
-    const value = (event.target as HTMLTextAreaElement | null)?.value ?? '';
-    this.systemPrompt.set(value);
-  }
-
-  onModelChange(event: Event): void {
-    const value = (event.target as HTMLSelectElement | null)?.value ?? 'glm-5';
-    this.selectedModel.set(value);
-  }
-
-  onTemperatureChange(event: Event): void {
-    const value = Number((event.target as HTMLInputElement | null)?.value ?? 0.2);
-    this.temperature.set(Number.isNaN(value) ? 0.2 : value);
-  }
-
-  onParticipantChange(event: Event): void {
-    const value = (event.target as HTMLSelectElement | null)?.value ?? 'Todos';
-    this.selectedParticipant.set(value);
-  }
-
-  onKeywordInput(event: Event): void {
-    const value = (event.target as HTMLInputElement | null)?.value ?? '';
-    this.keyword.set(value);
-  }
-
-  onDateFromChange(event: Event): void {
-    const value = (event.target as HTMLInputElement | null)?.value ?? '';
-    this.dateFrom.set(value);
-  }
-
-  onDateToChange(event: Event): void {
-    const value = (event.target as HTMLInputElement | null)?.value ?? '';
-    this.dateTo.set(value);
-  }
-
-  resetFilters(): void {
-    this.selectedParticipant.set('Todos');
-    this.keyword.set('');
-    this.dateFrom.set('');
-    this.dateTo.set('');
+    this.tokenBlurVersion.update((value) => value + 1);
   }
 
   async onFileUpload(event: Event): Promise<void> {
@@ -286,16 +305,18 @@ Retorne APENAS JSON valido no formato:
 
   async generateInsights(): Promise<void> {
     this.error.set('');
-    this.tokenTouched.set(true);
+    this.submitAttempted.set(true);
+    this.calibrationForm.controls.token.markAsTouched();
+    this.calibrationForm.controls.token.updateValueAndValidity({ onlySelf: true });
 
     const sanitizedToken = this.normalizedToken();
 
     if (!sanitizedToken) {
-      this.error.set('Token é obrigatório');
+      this.error.set('Token e obrigatorio');
       return;
     }
 
-    if (!this.isValidToken(sanitizedToken)) {
+    if (this.calibrationForm.controls.token.hasError('tokenFormat')) {
       this.error.set('Token invalido');
       return;
     }
@@ -307,6 +328,8 @@ Retorne APENAS JSON valido no formato:
 
     this.loading.set(true);
     this.apiResult.set(null);
+    const calibration = this.calibrationForm.getRawValue();
+    const filters = this.filtersForm.getRawValue();
 
     const request: ApiAnalysisRequest = {
       messages: this.filteredMessages().map((message) => ({
@@ -316,10 +339,10 @@ Retorne APENAS JSON valido no formato:
       })),
       metrics: this.metrics(),
       filters: {
-        participant: this.selectedParticipant() === 'Todos' ? null : this.selectedParticipant(),
-        keyword: this.keyword().trim() || null,
-        dateFrom: this.dateFrom() || null,
-        dateTo: this.dateTo() || null,
+        participant: filters.participant === 'Todos' ? null : filters.participant,
+        keyword: filters.keyword.trim() || null,
+        dateFrom: filters.dateFrom || null,
+        dateTo: filters.dateTo || null,
       },
     };
 
@@ -328,9 +351,9 @@ Retorne APENAS JSON valido no formato:
         this.api.analyze(
           request,
           sanitizedToken,
-          this.systemPrompt(),
-          this.selectedModel(),
-          this.temperature(),
+          calibration.systemPrompt,
+          calibration.model,
+          calibration.temperature,
         ),
       );
       this.apiResult.set(result);
@@ -372,16 +395,18 @@ Retorne APENAS JSON valido no formato:
     return typeof maybeCode === 'string' ? maybeCode : null;
   }
 
-  private isValidToken(token: string): boolean {
+  private tokenFormatValidator(control: AbstractControl<string>): ValidationErrors | null {
+    const token = control.value;
+
     if (typeof token !== 'string') {
-      return false;
+      return { tokenFormat: true };
     }
 
     if (token.length <= 10) {
-      return false;
+      return { tokenFormat: true };
     }
 
-    return /^[A-Za-z0-9._-]+$/.test(token);
+    return /^[A-Za-z0-9._-]+$/.test(token) ? null : { tokenFormat: true };
   }
 
   private parseFile(fileName: string, rawText: string): ChatMessage[] {
@@ -565,7 +590,7 @@ Retorne APENAS JSON valido no formato:
   }
 
   private filterListByParticipant(items: string[]): string[] {
-    const participant = this.selectedParticipant();
+    const participant = this.filterValues().participant;
     if (participant === 'Todos') {
       return items;
     }

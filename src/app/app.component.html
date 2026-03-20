@@ -15,31 +15,30 @@
 
   <section class="layout-grid">
     <aside class="left-column">
-      <section class="panel">
+      <section class="panel" [formGroup]="calibrationForm">
         <h2>Calibracao da IA</h2>
 
         <label>
           System Prompt
-          <textarea data-testid="system-prompt" [value]="systemPrompt()" (input)="onSystemPromptInput($event)"></textarea>
+          <textarea data-testid="system-prompt" formControlName="systemPrompt"></textarea>
         </label>
 
         <label>
           Modelo
-          <select data-testid="model-select" [value]="selectedModel()" (change)="onModelChange($event)">
+          <select data-testid="model-select" formControlName="model">
             <option *ngFor="let item of modelOptions" [value]="item.value">{{ item.label }}</option>
           </select>
         </label>
 
         <label>
-          Temperature ({{ temperature() }})
+          Temperature ({{ currentTemperature() }})
           <input
             data-testid="temperature-slider"
             type="range"
             min="0"
             max="1"
             step="0.1"
-            [value]="temperature()"
-            (input)="onTemperatureChange($event)"
+            formControlName="temperature"
           />
         </label>
 
@@ -49,8 +48,7 @@
             data-testid="token-input"
             type="password"
             [class.input-invalid]="tokenRequiredError() || tokenInvalidError()"
-            [value]="token()"
-            (input)="onTokenInput($event)"
+            formControlName="token"
             (blur)="onTokenBlur()"
             placeholder="Cole seu token"
           />
@@ -78,21 +76,21 @@
         </button>
       </section>
 
-      <section class="panel">
+      <section class="panel" [formGroup]="filtersForm">
         <h2>Filtros basicos</h2>
         <label>
           Palavra-chave
-          <input type="text" [value]="keyword()" (input)="onKeywordInput($event)" placeholder="ex: atraso" />
+          <input type="text" formControlName="keyword" placeholder="ex: atraso" />
         </label>
 
         <div class="two-col">
           <label>
             Data inicial
-            <input type="date" [value]="dateFrom()" (change)="onDateFromChange($event)" />
+            <input type="date" formControlName="dateFrom" />
           </label>
           <label>
             Data final
-            <input type="date" [value]="dateTo()" (change)="onDateToChange($event)" />
+            <input type="date" formControlName="dateTo" />
           </label>
         </div>
 
@@ -104,13 +102,12 @@
       <ng-container *ngIf="hasAnalysis(); else emptyState">
         <header class="dashboard-header panel" data-testid="dashboard-header">
           <h2>Dashboard</h2>
-          <div class="filter-inline">
+          <div class="filter-inline" [formGroup]="filtersForm">
             <label for="participantFilter">Filtro por participante</label>
             <select
               id="participantFilter"
               data-testid="participant-filter"
-              [value]="selectedParticipant()"
-              (change)="onParticipantChange($event)"
+              formControlName="participant"
             >
               <option *ngFor="let participant of participants()" [value]="participant">{{ participant }}</option>
             </select>

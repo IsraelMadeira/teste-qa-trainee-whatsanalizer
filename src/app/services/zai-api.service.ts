@@ -1,6 +1,7 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { catchError, map, Observable, throwError, timeout, TimeoutError } from 'rxjs';
+import { z } from 'zod';
 
 import { environment } from '../../environments/environment';
 import {
@@ -9,6 +10,19 @@ import {
   ZAiChatCompletionResponse,
 } from '../models/chat-insights.models';
 import { WHATSANALIZER_SYSTEM_PROMPT } from '../prompts/system-prompt';
+
+const analysisResponseSchema = z.object({
+  summary: z.string(),
+  sentiment: z.enum(['positivo', 'negativo', 'neutro']),
+  sentimentDescription: z.string(),
+  participants: z.array(z.string()),
+  tasks: z.array(z.string()),
+  deadlines: z.array(z.string()),
+  risks: z.array(z.string()),
+  conflicts: z.array(z.string()),
+  metrics: z.record(z.string(), z.unknown()),
+  confidence: z.enum(['low', 'medium', 'high']),
+});
 
 @Injectable({ providedIn: 'root' })
 export class ZAiApiService {
@@ -64,21 +78,14 @@ export class ZAiApiService {
     }
 
     try {
-      const parsed = JSON.parse(rawContent) as Record<string, unknown>;
-      this.validateStrictContract(parsed);
+      const parsed = JSON.parse(rawContent) as unknown;
+      const contract = analysisResponseSchema.safeParse(parsed);
 
-      return {
-        summary: parsed['summary'] as string,
-        sentiment: parsed['sentiment'] as 'positivo' | 'negativo' | 'neutro',
-        sentimentDescription: parsed['sentimentDescription'] as string,
-        participants: this.ensureStringArray(parsed['participants']),
-        tasks: this.ensureStringArray(parsed['tasks']),
-        deadlines: this.ensureStringArray(parsed['deadlines']),
-        risks: this.ensureStringArray(parsed['risks']),
-        conflicts: this.ensureStringArray(parsed['conflicts']),
-        metrics: parsed['metrics'] as Record<string, unknown>,
-        confidence: parsed['confidence'] as 'low' | 'medium' | 'high',
-      };
+      if (!contract.success) {
+        throw this.createSemanticError('INVALID_CONTRACT', 'Contrato de dados invalido: formato inesperado.');
+      }
+
+      return contract.data;
     } catch (error: unknown) {
       if (this.isSemanticError(error)) {
         throw error;
@@ -119,74 +126,6 @@ export class ZAiApiService {
 
     const maybeStatus = (error as { status?: unknown }).status;
     return typeof maybeStatus === 'number' ? maybeStatus : null;
-  }
-
-  private validateStrictContract(parsed: Record<string, unknown>): void {
-    const summary = parsed['summary'];
-    const sentiment = parsed['sentiment'];
-    const sentimentDescription = parsed['sentimentDescription'];
-    const participants = parsed['participants'];
-    const tasks = parsed['tasks'];
-    const deadlines = parsed['deadlines'];
-    const risks = parsed['risks'];
-    const conflicts = parsed['conflicts'];
-    const metrics = parsed['metrics'];
-    const confidence = parsed['confidence'];
-
-    if (typeof summary !== 'string') {
-      throw this.createSemanticError('INVALID_CONTRACT', 'Contrato de dados invalido: campo summary ausente ou invalido.');
-    }
-
-    if (sentiment !== 'positivo' && sentiment !== 'negativo' && sentiment !== 'neutro') {
-      throw this.createSemanticError('INVALID_CONTRACT', 'Contrato de dados invalido: campo sentiment ausente ou invalido.');
-    }
-
-    if (typeof sentimentDescription !== 'string') {
-      throw this.createSemanticError(
-        'INVALID_CONTRACT',
-        'Contrato de dados invalido: campo sentimentDescription ausente ou invalido.',
-      );
-    }
-
-    if (!this.isStringArray(participants)) {
-      throw this.createSemanticError('INVALID_CONTRACT', 'Contrato de dados invalido: campo participants ausente ou invalido.');
-    }
-
-    if (!this.isStringArray(tasks)) {
-      throw this.createSemanticError('INVALID_CONTRACT', 'Contrato de dados invalido: campo tasks ausente ou invalido.');
-    }
-
-    if (!this.isStringArray(deadlines)) {
-      throw this.createSemanticError('INVALID_CONTRACT', 'Contrato de dados invalido: campo deadlines ausente ou invalido.');
-    }
-
-    if (!this.isStringArray(risks)) {
-      throw this.createSemanticError('INVALID_CONTRACT', 'Contrato de dados invalido: campo risks ausente ou invalido.');
-    }
-
-    if (!this.isStringArray(conflicts)) {
-      throw this.createSemanticError('INVALID_CONTRACT', 'Contrato de dados invalido: campo conflicts ausente ou invalido.');
-    }
-
-    if (typeof metrics !== 'object' || metrics === null || Array.isArray(metrics)) {
-      throw this.createSemanticError('INVALID_CONTRACT', 'Contrato de dados invalido: campo metrics ausente ou invalido.');
-    }
-
-    if (confidence !== 'low' && confidence !== 'medium' && confidence !== 'high') {
-      throw this.createSemanticError('INVALID_CONTRACT', 'Contrato de dados invalido: campo confidence ausente ou invalido.');
-    }
-  }
-
-  private ensureStringArray(value: unknown): string[] {
-    if (!this.isStringArray(value)) {
-      throw this.createSemanticError('INVALID_CONTRACT', 'Contrato de dados invalido: array de strings esperado.');
-    }
-
-    return value;
-  }
-
-  private isStringArray(value: unknown): value is string[] {
-    return Array.isArray(value) && value.every((item) => typeof item === 'string');
   }
 
   private isValidToken(token: string): boolean {
